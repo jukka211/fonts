@@ -258,6 +258,8 @@ function buildUI() {
       controlsToggle.textContent = open ? "Close Controls" : "Open Controls";
     };
 
+    setControlsOpen(true);
+
     controlsToggle.addEventListener("click", () => {
       setControlsOpen(!controlsSection.classList.contains("open"));
     });
