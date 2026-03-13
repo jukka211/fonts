@@ -1,14 +1,16 @@
 // ========================================================
 // Broken Script – modular glyph builder
-// ✅ Full sketch for p5 Web Editor
-// ✅ Canvas + High-Res PNG export (2×/4×) + SVG export (requires p5.js-svg)
-// ✅ Optical weight scaling + auto stroke correction (for large sizes)
+// ✅ Canvas + High-Res PNG export (2×/4×) + SVG export
+// ✅ Canvas format ratios: 4:5 | 16:9 | 9:16
 // ========================================================
 
 let ui = {};
 let glyphFnsU = {};
 let glyphFnsL = {};
 let G = null;
+
+// Current canvas aspect ratio { w, h }  (logical units, not pixels)
+let currentRatio = { w: 4, h: 5 };
 
 // ---------- Graphics context + wrappers ----------
 function setG(g) { G = g; }
@@ -27,52 +29,86 @@ function SW(w) { G.strokeWeight(w); }
 function SC(cap) { G.strokeCap(cap); }
 function SJ(j) { G.strokeJoin(j); }
 
+// ---------- Ratio helpers ----------
+
+/**
+ * Given the container's available width & height and a target ratio {w,h},
+ * return the largest integer-aligned canvas size that fits inside the container
+ * while preserving the ratio.
+ */
+function ratioFit(containerW, containerH, ratio) {
+  const byW = { w: containerW, h: Math.round(containerW * ratio.h / ratio.w) };
+  const byH = { w: Math.round(containerH * ratio.w / ratio.h), h: containerH };
+  if (byW.h <= containerH) return byW;
+  return byH;
+}
+
 // ---------- Setup / Draw ----------
 function setup() {
-  const cnv = createCanvas(1500, 2100);
-  cnv.parent(document.querySelector("main") || document.body);
+  const container = document.getElementById("canvas-container");
+  const containerW = Math.max(1, Math.floor(container?.clientWidth  || 800));
+  const containerH = Math.max(1, Math.floor(container?.clientHeight || 1000));
+  const sz = ratioFit(containerW, containerH, currentRatio);
+
+  const cnv = createCanvas(Math.max(1, sz.w), Math.max(1, sz.h));
+  cnv.parent(container || document.body);
   pixelDensity(2);
 
   initGlyphs();
   buildUI();
 }
 
+function fitCanvasToContainer() {
+  const container = document.getElementById("canvas-container");
+  if (!container) return;
+
+  const containerW = Math.max(1, Math.floor(container.clientWidth));
+  const containerH = Math.max(1, Math.floor(container.clientHeight));
+  const sz = ratioFit(containerW, containerH, currentRatio);
+  const w = Math.max(1, sz.w);
+  const h = Math.max(1, sz.h);
+  if (w !== width || h !== height) {
+    resizeCanvas(w, h);
+  }
+}
+
+function windowResized() {
+  fitCanvasToContainer();
+}
+
 function draw() {
   const P = getParams();
-  const str = ui.ta.value();
-  drawScene(this, P, str);
+  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
+  drawScene(this, P, str, width, height);
 }
 
 // ---------- Params ----------
 function getParams() {
   return {
-    size: ui.size.value(),
-    weight: ui.weight.value(),
-    optical: ui.optical.value(),
-    autoSW: ui.autoSW.value(),
-    slant: ui.slant.value(),
-    arc: ui.arc.value(),
-    notch: ui.notch.value(),
-    chaos: ui.chaos.value(),
-    track: ui.track.value(),
-    line: ui.line.value(),
-    seed: ui.seed.value() | 0,
+    size:    Number(ui.size?.value),
+    weight:  Number(ui.weight?.value),
+    optical: Number(ui.optical?.value),
+    autoSW:  Number(ui.autoSW?.value),
+    slant:   Number(ui.slant?.value),
+    arc:     Number(ui.arc?.value),
+    notch:   Number(ui.notch?.value),
+    chaos:   Number(ui.chaos?.value),
+    track:   Number(ui.track?.value),
+    line:    Number(ui.line?.value),
+    seed:    Number(ui.seed?.value) | 0,
   };
 }
 
-// ---------- Optical stroke (core) ----------
+// ---------- Optical stroke ----------
 function computeStrokeNorm(P) {
-  // base normalization because we scale(P.size)
   let sw = P.weight / max(1, P.size);
 
-  // (A) optical scaling: keep perceived weight stable across sizes
   const optical = constrain(P.optical ?? 0, 0, 1);
   const scaleRef = 140;
   const ratio = max(0.25, P.size / scaleRef);
   const exp = lerp(0.0, 0.35, optical);
   sw *= pow(ratio, -exp);
 
-  // (B) auto clamp: prevents extremes at tiny/huge sizes
   const autoSW = constrain(P.autoSW ?? 0, 0, 1);
   const minSW = lerp(0.15, 0.25, autoSW);
   const maxSW = lerp(0.60, 0.42, autoSW);
@@ -83,22 +119,27 @@ function computeStrokeNorm(P) {
 }
 
 // ---------- Scene / Layout ----------
-function drawScene(g, P, str) {
+// w, h are the logical canvas dimensions (pixels at scale=1).
+// Always pass them explicitly so exports match the live canvas exactly.
+function drawScene(g, P, str, w, h) {
   setG(g);
+
+  // fall back to the live canvas size when called from draw()
+  if (w === undefined) w = width;
+  if (h === undefined) h = height;
 
   G.background(255);
 
-  // layout area values
-  const pad = 40;
-  const top = 90;
-  const areaH = G.height - 260;
+  // proportional padding – looks the same at every export scale
+  const pad  = w * 0.04;
+  const padV = h * 0.06;
 
-  // layout
-  const x0 = pad + 30;
-  const y0 = top + 70;
-  const maxW = G.width - 2 * pad - 60;
+  const x0   = pad;
+  const y0   = padV + P.size;          // one em below top padding
+  const maxW = w - 2 * pad;
+  const maxH = h - padV - P.size * 0.5;
 
-  drawTextG(str, x0, y0, maxW, areaH - 80, P);
+  drawTextG(str, x0, y0, maxW, maxH, P);
 }
 
 function drawTextG(str, x, y, maxW, maxH, P) {
@@ -115,16 +156,9 @@ function drawTextG(str, x, y, maxW, maxH, P) {
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
 
-      if (ch === " ") {
-        penX += em * 0.38;
-        continue;
-      }
+      if (ch === " ") { penX += em * 0.38; continue; }
 
-      // wrap
-      if (penX > x + maxW - em * 0.6) {
-        penX = x;
-        penY += lineH;
-      }
+      if (penX > x + maxW - em * 0.6) { penX = x; penY += lineH; }
       if (penY > y + maxH) return;
 
       const w = drawGlyphG(ch, penX, penY, P);
@@ -136,26 +170,21 @@ function drawTextG(str, x, y, maxW, maxH, P) {
 }
 
 function drawGlyphG(ch, x, y, P) {
-  // baseline anchor: (x,y) is baseline
   G.push();
   G.translate(x, y);
   G.scale(P.size);
 
-  // ink
   S(0);
   SW(computeStrokeNorm(P));
   SC(SQUARE);
   SJ(MITER);
   NOF();
 
-  // deterministic per glyph
   const code = ch.codePointAt(0) || 0;
   const rng = makeRng(P.seed * 1337 + code * 97);
 
-  // slant
   G.applyMatrix(1, 0, P.slant, 1, 0, 0);
 
-  // draw
   let adv = 0.62;
   const fnU = glyphFnsU[ch];
   const fnL = glyphFnsL[ch];
@@ -169,76 +198,90 @@ function drawGlyphG(ch, x, y, P) {
   return adv * P.size;
 }
 
-function isDigit(ch) {
-  return ch >= "0" && ch <= "9";
-}
+function isDigit(ch) { return ch >= "0" && ch <= "9"; }
 
 // ========================================================
 // UI
 // ========================================================
 
 function buildUI() {
-  // Textarea
-  ui.ta = createElement(
-    "textarea",
-    "ABCDEFGHI\nJKLMNOPQR\nSTUVWXYZ\n\nabcdefghijklmnopqrstuvwxyz\n0123456789\n\n@?.;&!+*§=ÄÖÜäöüß%"
-  );
-  ui.ta.position(40, height - 160);
-  ui.ta.size(520, 120);
-  ui.ta.style("font-size", "16px");
-  ui.ta.style("padding", "8px");
-  ui.ta.style("border", "1px solid #ccc");
-  ui.ta.style("resize", "both");
+  const byId = (id) => document.getElementById(id);
+  const controlsSection = byId("controls");
+  const controlsToggle = byId("controls-toggle");
 
-  const x = 600;
-  const y = height - 190;
-  const colW = 250;
-  const rowH = 44;
+  const linkValue = (inputId, valueId) => {
+    const input = byId(inputId);
+    const value = byId(valueId);
+    if (!input || !value) return;
+    const sync = () => (value.textContent = input.value);
+    input.addEventListener("input", sync);
+    sync();
+  };
 
-  ui.size = labeledSlider("Size", x, y + rowH * 0, 30, 220, 140, 1);
-  ui.weight = labeledSlider("Weight", x, y + rowH * 1, 2, 60, 18, 1);
+  ui.ta     = byId("ui-textarea");
+  ui.size   = byId("ui-size");
+  ui.weight = byId("ui-weight");
+  ui.optical= byId("ui-optical");
+  ui.autoSW = byId("ui-autosw");
+  ui.slant  = byId("ui-slant");
+  ui.arc    = byId("ui-arc");
+  ui.notch  = byId("ui-notch");
+  ui.chaos  = byId("ui-chaos");
+  ui.track  = byId("ui-track");
+  ui.line   = byId("ui-line");
+  ui.seed   = byId("ui-seed");
 
-  ui.optical = labeledSlider("Optical weight", x, y + rowH * 2, 0, 1, 0.65, 0.01);
-  ui.autoSW = labeledSlider("Auto SW clamp", x, y + rowH * 3, 0, 1, 0.85, 0.01);
+  linkValue("ui-size",    "ui-size-value");
+  linkValue("ui-weight",  "ui-weight-value");
+  linkValue("ui-optical", "ui-optical-value");
+  linkValue("ui-autosw",  "ui-autosw-value");
+  linkValue("ui-slant",   "ui-slant-value");
+  linkValue("ui-arc",     "ui-arc-value");
+  linkValue("ui-notch",   "ui-notch-value");
+  linkValue("ui-chaos",   "ui-chaos-value");
+  linkValue("ui-track",   "ui-track-value");
+  linkValue("ui-line",    "ui-line-value");
+  linkValue("ui-seed",    "ui-seed-value");
 
-  ui.slant = labeledSlider("Slant", x + colW, y + rowH * 0, -0.45, 0.45, 0.08, 0.01);
-  ui.arc = labeledSlider("Arc radius", x + colW, y + rowH * 1, 0.2, 1.4, 0.95, 0.01);
-  ui.notch = labeledSlider("Notch / break", x + colW, y + rowH * 2, 0, 1, 0.55, 0.01);
-  ui.chaos = labeledSlider("Chaos / overlap", x + colW, y + rowH * 3, 0, 1, 0.22, 0.01);
+  ui.btnPNG4 = byId("ui-btn-png-4");
+  ui.btnPNG2 = byId("ui-btn-png-2");
+  ui.btnSVG  = byId("ui-btn-svg");
 
-  ui.track = labeledSlider("Tracking", x + colW * 2, y + rowH * 0, -0.25, 1.0, 0.12, 0.01);
-  ui.line = labeledSlider("Line height", x + colW * 2, y + rowH * 1, 0.85, 1.8, 1.18, 0.01);
-  ui.seed = labeledSlider("Seed", x + colW * 2, y + rowH * 2, 0, 9999, 120, 1);
+  if (ui.btnPNG4) ui.btnPNG4.addEventListener("click", () => downloadPNG(4));
+  if (ui.btnPNG2) ui.btnPNG2.addEventListener("click", () => downloadPNG(2));
+  if (ui.btnSVG)  ui.btnSVG.addEventListener("click",  downloadSVG);
 
-  // Export buttons
-  ui.btnPNG4 = createButton("Download PNG (4×)");
-  ui.btnPNG4.position(40, height - 30);
-  ui.btnPNG4.mousePressed(() => downloadPNG(4));
+  if (controlsSection && controlsToggle) {
+    const setControlsOpen = (open) => {
+      controlsSection.classList.toggle("open", open);
+      controlsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      controlsToggle.textContent = open ? "Close Controls" : "Open Controls";
+    };
 
-  ui.btnPNG2 = createButton("PNG (2×)");
-  ui.btnPNG2.position(190, height - 30);
-  ui.btnPNG2.mousePressed(() => downloadPNG(2));
+    controlsToggle.addEventListener("click", () => {
+      setControlsOpen(!controlsSection.classList.contains("open"));
+    });
+  }
 
-  ui.btnSVG = createButton("Download SVG");
-  ui.btnSVG.position(280, height - 30);
-  ui.btnSVG.mousePressed(downloadSVG);
-}
+  // ---- Format toggle ----
+  const ratioMap = {
+    "4:5":  { w: 4,  h: 5  },
+    "16:9": { w: 16, h: 9  },
+    "9:16": { w: 9,  h: 16 },
+  };
 
-function labeledSlider(label, x, y, a, b, v, step = 1) {
-  const wrap = createDiv();
-  wrap.position(x, y);
-  wrap.style("width", "230px");
+  document.querySelectorAll(".fmt-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".fmt-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
 
-  const lab = createDiv(label);
-  lab.parent(wrap);
-  lab.style("font-size", "12px");
-  lab.style("color", "#222");
-  lab.style("margin-bottom", "4px");
-
-  const s = createSlider(a, b, v, step);
-  s.parent(wrap);
-  s.style("width", "230px");
-  return s;
+      const key = btn.dataset.ratio;
+      if (ratioMap[key]) {
+        currentRatio = ratioMap[key];
+        fitCanvasToContainer();
+      }
+    });
+  });
 }
 
 // ========================================================
@@ -246,17 +289,23 @@ function labeledSlider(label, x, y, a, b, v, step = 1) {
 // ========================================================
 
 function downloadPNG(scale = 4) {
-  const P = getParams();
-  const str = ui.ta.value();
+  const P   = getParams();
+  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
 
-  const w = width, h = height;
-  const pg = createGraphics(w * scale, h * scale);
+  // Derive the export dimensions directly from the chosen ratio so the
+  // output is pixel-perfect regardless of the browser window size.
+  // We use the live canvas as the reference logical size.
+  const logW = width;
+  const logH = height;
+
+  const pg = createGraphics(logW * scale, logH * scale);
   pg.pixelDensity(1);
-  pg.scale(scale);
+  pg.scale(scale);   // everything drawn at logical coords × scale
 
-  drawScene(pg, P, str);
+  // Pass the logical size so drawScene's proportional layout matches exactly.
+  drawScene(pg, P, str, logW, logH);
 
-  const filename = `brokenscript_${scale}x.png`;
+  const filename = `brokenscript_${currentRatio.w}x${currentRatio.h}_${scale}x.png`;
   const url = pg.canvas.toDataURL("image/png");
   const a = document.createElement("a");
   a.href = url;
@@ -264,7 +313,6 @@ function downloadPNG(scale = 4) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-
   pg.remove();
 }
 
@@ -274,15 +322,15 @@ function downloadSVG() {
     return;
   }
 
-  const P = getParams();
-  const str = ui.ta.value();
+  const P   = getParams();
+  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
 
   const svg = createGraphics(width, height, SVG);
   svg.pixelDensity(1);
 
-  drawScene(svg, P, str);
+  drawScene(svg, P, str, width, height);
 
-  save(svg, "brokenscript.svg");
+  save(svg, `brokenscript_${currentRatio.w}x${currentRatio.h}.svg`);
   svg.remove();
 }
 
@@ -290,9 +338,7 @@ function downloadSVG() {
 // Baukasten (Modular parts)
 // ========================================================
 
-function jitter(rng, s) {
-  return (rng() * 2 - 1) * s;
-}
+function jitter(rng, s) { return (rng() * 2 - 1) * s; }
 
 function stem(x, y0, y1, P, rng, opts = {}) {
   const c = 0.08 * P.arc;
@@ -302,20 +348,11 @@ function stem(x, y0, y1, P, rng, opts = {}) {
   const x1 = x + jitter(rng, j);
   const cx = x + c + jitter(rng, j);
 
-  const nb = P.notch * 0.18;
+  const nb  = P.notch * 0.18;
   const mid = lerp(y0, y1, 0.55);
 
-  // top
-  BS();
-  V(x0, y0);
-  QV(cx, lerp(y0, mid, 0.35), x1, mid - nb);
-  ES();
-
-  // bottom
-  BS();
-  V(x1, mid + nb);
-  QV(cx - c * 0.7, lerp(mid, y1, 0.55), x0, y1);
-  ES();
+  BS(); V(x0, y0); QV(cx, lerp(y0, mid, 0.35), x1, mid - nb); ES();
+  BS(); V(x1, mid + nb); QV(cx - c * 0.7, lerp(mid, y1, 0.55), x0, y1); ES();
 
   if (opts.foot) foot(x0, y1, P, rng);
   if (opts.head) head(x0, y0, P, rng);
@@ -325,17 +362,13 @@ function head(x, y, P, rng) {
   const j = P.chaos * 0.06;
   const w = 0.12 + 0.05 * P.arc;
   const h = 0.08;
-  L(
-    x - w + jitter(rng, j), y + h + jitter(rng, j),
-    x + 0.02 + jitter(rng, j), y + jitter(rng, j)
-  );
+  L(x - w + jitter(rng, j), y + h + jitter(rng, j), x + 0.02 + jitter(rng, j), y + jitter(rng, j));
 }
 
 function foot(x, y, P, rng) {
   const j = P.chaos * 0.06;
   const w = 0.14 + 0.06 * P.arc;
   const r = 0.08 + 0.06 * P.arc;
-
   BS();
   V(x + jitter(rng, j), y + jitter(rng, j));
   QV(x - w, y + r, x - w * 0.1, y + r * 1.15);
@@ -344,22 +377,18 @@ function foot(x, y, P, rng) {
 
 function bowl(cx, cy, rx, ry, a0, a1, P, rng) {
   const steps = 18;
-  const j = P.chaos * 0.03;
+  const j     = P.chaos * 0.03;
   const tooth = 0.0 + P.notch * 0.018;
 
   BS();
   for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const a = lerp(a0, a1, t);
+    const t   = i / steps;
+    const a   = lerp(a0, a1, t);
     const rrx = rx * (1 + jitter(rng, j));
     const rry = ry * (1 + jitter(rng, j));
     let x = cx + cos(a) * rrx;
     let y = cy + sin(a) * rry;
-
-    if (i % 2 === 0) {
-      x += cos(a + HALF_PI) * tooth;
-      y += sin(a + HALF_PI) * tooth;
-    }
+    if (i % 2 === 0) { x += cos(a + HALF_PI) * tooth; y += sin(a + HALF_PI) * tooth; }
     V(x, y);
   }
   ES();
@@ -381,19 +410,13 @@ function hair(x0, y0, x1, y1, P, rng) {
   const w = max(0.6, computeStrokeNorm(P) * 0.45);
   SW(w);
   const j = P.chaos * 0.04;
-  L(
-    x0 + jitter(rng, j), y0 + jitter(rng, j),
-    x1 + jitter(rng, j), y1 + jitter(rng, j)
-  );
+  L(x0 + jitter(rng, j), y0 + jitter(rng, j), x1 + jitter(rng, j), y1 + jitter(rng, j));
   G.pop();
 }
 
 function cross(x0, y0, x1, y1, P, rng) {
   const j = P.chaos * 0.05;
-  L(
-    x0 + jitter(rng, j), y0 + jitter(rng, j),
-    x1 + jitter(rng, j), y1 + jitter(rng, j)
-  );
+  L(x0 + jitter(rng, j), y0 + jitter(rng, j), x1 + jitter(rng, j), y1 + jitter(rng, j));
 }
 
 // ========================================================
@@ -403,35 +426,22 @@ function cross(x0, y0, x1, y1, P, rng) {
 function initGlyphs() {
   // -------- uppercase A–Z --------
 
-// --- A: alte Version als Alternate behalten ---
-glyphFnsU["Â"] = (P, rng) => {
-  stem(0.12, -1.02, 0.02, P, rng, { foot: true, head: true });
-  stem(0.58, -1.02, 0.02, P, rng, { foot: true, head: true });
-  cross(0.17, -0.55, 0.53, -0.62, P, rng);
-  hair(0.10, -0.95, 0.22, -1.05, P, rng);
-  return 0.72;
-};
+  glyphFnsU["Â"] = (P, rng) => {
+    stem(0.12, -1.02, 0.02, P, rng, { foot: true, head: true });
+    stem(0.58, -1.02, 0.02, P, rng, { foot: true, head: true });
+    cross(0.17, -0.55, 0.53, -0.62, P, rng);
+    hair(0.10, -0.95, 0.22, -1.05, P, rng);
+    return 0.72;
+  };
 
-glyphFnsU["A"] = (P, rng) => {
-  // stabiler Aufbau
-  stem(0.10, -1.05, 0.02, P, rng, { foot: true, head: true });
-  stem(0.60, -1.05, 0.02, P, rng, { foot: true, head: true });
-
-  // Querstrebe: klar + nur leicht „handmade“
-  const j = P.chaos * 0.06;
-  cross(
-    0.20 + jitter(rng, j),
-    -0.50 + jitter(rng, j),
-    0.54 + jitter(rng, j),
-    -0.52 + jitter(rng, j),
-    P, rng
-  );
-
-  // Apex-/Fraktur-Akzent: mittig sinnvoll platziert
-  hair(0.30, -0.98, 0.44, -1.14, P, rng);
-
-  return 0.74;
-};
+  glyphFnsU["A"] = (P, rng) => {
+    stem(0.10, -1.05, 0.02, P, rng, { foot: true, head: true });
+    stem(0.60, -1.05, 0.02, P, rng, { foot: true, head: true });
+    const j = P.chaos * 0.06;
+    cross(0.20 + jitter(rng, j), -0.50 + jitter(rng, j), 0.54 + jitter(rng, j), -0.52 + jitter(rng, j), P, rng);
+    hair(0.30, -0.98, 0.44, -1.14, P, rng);
+    return 0.74;
+  };
 
   glyphFnsU["B"] = (P, rng) => {
     stem(0.16, -1.05, 0.02, P, rng, { foot: true, head: true });
@@ -508,20 +518,14 @@ glyphFnsU["A"] = (P, rng) => {
     return 0.66;
   };
 
-glyphFnsU["M"] = (P, rng) => {
-
-  stem(0.07, -1.05, 0.02, P, rng, { foot: true, head: true });
-  stem(0.67, -1.05, 0.02, P, rng, { foot: true, head: true });
-
-  // Mittelstamm etwas höher beginnen
-  stem(0.37, -0.85, 0.02, P, rng, { foot: true, head: true });
-
-  // flachere Verbindungslinien
-  hair(0.12, -1.02, 0.37, -0.78, P, rng);
-  hair(0.62, -1.02, 0.37, -0.78, P, rng);
-
-  return 0.85;
-};
+  glyphFnsU["M"] = (P, rng) => {
+    stem(0.07, -1.05, 0.02, P, rng, { foot: true, head: true });
+    stem(0.67, -1.05, 0.02, P, rng, { foot: true, head: true });
+    stem(0.37, -0.85, 0.02, P, rng, { foot: true, head: true });
+    hair(0.12, -1.02, 0.37, -0.78, P, rng);
+    hair(0.62, -1.02, 0.37, -0.78, P, rng);
+    return 0.85;
+  };
 
   glyphFnsU["N"] = (P, rng) => {
     stem(0.14, -1.05, 0.02, P, rng, { foot: true, head: true });
@@ -557,66 +561,28 @@ glyphFnsU["M"] = (P, rng) => {
     return 0.74;
   };
 
- glyphFnsU["Ŝ"] = (P, rng) => {
-  bowl(0.42, -0.80, 0.26 * P.arc, 0.22 * P.arc, PI * 1.1, PI * 2.1, P, rng);
-  bowl(0.42, -0.25, 0.28 * P.arc, 0.26 * P.arc, -PI * 0.05, PI * 0.95, P, rng);
-  cross(0.22, -0.52, 0.58, -0.52, P, rng);
-  return 0.70;
-};
+  glyphFnsU["Ŝ"] = (P, rng) => {
+    bowl(0.42, -0.80, 0.26 * P.arc, 0.22 * P.arc, PI * 1.1, PI * 2.1, P, rng);
+    bowl(0.42, -0.25, 0.28 * P.arc, 0.26 * P.arc, -PI * 0.05, PI * 0.95, P, rng);
+    cross(0.22, -0.52, 0.58, -0.52, P, rng);
+    return 0.70;
+  };
 
-glyphFnsL["ŝ"] = (P, rng) => {
-  const xh = -0.62;
-  bowl(0.30, xh + 0.10, 0.18 * P.arc, 0.16 * P.arc, PI * 1.0, PI * 2.1, P, rng);
-  bowl(0.30, xh + 0.34, 0.18 * P.arc, 0.16 * P.arc, -PI * 0.05, PI * 1.0, P, rng);
-  return 0.56;
-};
+  glyphFnsL["ŝ"] = (P, rng) => {
+    const xh = -0.62;
+    bowl(0.30, xh + 0.10, 0.18 * P.arc, 0.16 * P.arc, PI * 1.0, PI * 2.1, P, rng);
+    bowl(0.30, xh + 0.34, 0.18 * P.arc, 0.16 * P.arc, -PI * 0.05, PI * 1.0, P, rng);
+    return 0.56;
+  };
 
-// NEU: Großes S – zwei Bögen + diagonaler „Cut/Bridge“ + kleines abgesetztes Stück
-glyphFnsU["S"] = (P, rng) => {
-  const j = P.chaos * 0.04;
-
-  // obere „Kappe“ (kräftiger Bogen)
-  bowl(
-    0.44 + jitter(rng, j),
-    -0.82 + jitter(rng, j),
-    0.30 * P.arc,
-    0.24 * P.arc,
-    PI * 1.15,
-    PI * 2.05,
-    P, rng
-  );
-
-  // unterer „Bauch“
-  bowl(
-    0.42 + jitter(rng, j),
-    -0.22 + jitter(rng, j),
-    0.32 * P.arc,
-    0.28 * P.arc,
-    -PI * 0.15,
-    PI * 0.95,
-    P, rng
-  );
-
-  // diagonaler „Bridge/Cut“ (wirkt wie dein schräges Rechteck durch SQUARE caps)
-  cross(
-    0.26 + jitter(rng, j),
-    -0.62 + jitter(rng, j),
-    0.52 + jitter(rng, j),
-    -0.42 + jitter(rng, j),
-    P, rng
-  );
-
-  // kleines abgesetztes „Stück“ rechts unten (wie in deiner Skizze)
-  cross(
-    0.54 + jitter(rng, j),
-    -0.36 + jitter(rng, j),
-    0.60 + jitter(rng, j),
-    -0.30 + jitter(rng, j),
-    P, rng
-  );
-
-  return 0.72;
-};
+  glyphFnsU["S"] = (P, rng) => {
+    const j = P.chaos * 0.04;
+    bowl(0.44 + jitter(rng, j), -0.82 + jitter(rng, j), 0.30 * P.arc, 0.24 * P.arc, PI * 1.15, PI * 2.05, P, rng);
+    bowl(0.42 + jitter(rng, j), -0.22 + jitter(rng, j), 0.32 * P.arc, 0.28 * P.arc, -PI * 0.15, PI * 0.95, P, rng);
+    cross(0.26 + jitter(rng, j), -0.62 + jitter(rng, j), 0.52 + jitter(rng, j), -0.42 + jitter(rng, j), P, rng);
+    cross(0.54 + jitter(rng, j), -0.36 + jitter(rng, j), 0.60 + jitter(rng, j), -0.30 + jitter(rng, j), P, rng);
+    return 0.72;
+  };
 
   glyphFnsU["T"] = (P, rng) => {
     stem(0.34, -1.05, 0.02, P, rng, { foot: true, head: true });
@@ -668,27 +634,22 @@ glyphFnsU["S"] = (P, rng) => {
   };
 
   // -------- lowercase a–z --------
-  const xh = -0.62;
-  const base = 0.02;
+  const xh   = -0.62;
+  const base =  0.02;
 
   glyphFnsL["a"] = (P, rng) => { bowl(0.30, xh + 0.22, 0.20 * P.arc, 0.22 * P.arc, 0, TWO_PI, P, rng); stem(0.52, xh, base, P, rng, { foot: true, head: false }); return 0.66; };
   glyphFnsL["b"] = (P, rng) => { stem(0.18, -1.05, base, P, rng, { foot: true, head: true }); bowl(0.40, xh + 0.20, 0.22 * P.arc, 0.24 * P.arc, -PI * 0.55, PI * 0.60, P, rng); return 0.64; };
   glyphFnsL["c"] = (P, rng) => { bowl(0.34, xh + 0.22, 0.22 * P.arc, 0.24 * P.arc, PI * 0.25, PI * 1.75, P, rng); return 0.56; };
   glyphFnsL["d"] = (P, rng) => { stem(0.50, -1.05, base, P, rng, { foot: true, head: true }); bowl(0.30, xh + 0.22, 0.22 * P.arc, 0.24 * P.arc, 0, TWO_PI, P, rng); return 0.68; };
   glyphFnsL["e"] = (P, rng) => { bowl(0.32, xh + 0.22, 0.22 * P.arc, 0.22 * P.arc, PI * 0.15, PI * 1.95, P, rng); cross(0.18, xh + 0.22, 0.48, xh + 0.22, P, rng); return 0.58; };
-glyphFnsL["f"] = (P, rng) => {
 
-  // Stamm ohne automatische Kopf-Form
-  stem(0.16, -1.05, base, P, rng, { foot: true, head: false });
+  glyphFnsL["f"] = (P, rng) => {
+    stem(0.16, -1.05, base, P, rng, { foot: true, head: false });
+    cross(0.02, -0.90, 0.38, -0.84, P, rng);
+    cross(-0.02, xh + 0.12, 0.40, xh + 0.04, P, rng);
+    return 0.45;
+  };
 
-  // oberer Ansatzstrich – kompakter
-  cross(0.02, -0.90, 0.38, -0.84, P, rng);
-
-  // Querstrich auf x-Höhe – etwas ruhiger
-  cross(-0.02, xh + 0.12, 0.40, xh + 0.04, P, rng);
-
-  return 0.45;
-};
   glyphFnsL["g"] = (P, rng) => { bowl(0.30, xh + 0.22, 0.22 * P.arc, 0.24 * P.arc, 0, TWO_PI, P, rng); stem(0.52, xh, 0.42, P, rng, { foot: true, head: false }); bowl(0.32, 0.34, 0.20 * P.arc, 0.16 * P.arc, 0, PI, P, rng); return 0.66; };
   glyphFnsL["h"] = (P, rng) => { stem(0.18, -1.05, base, P, rng, { foot: true, head: true }); stem(0.52, xh, base, P, rng, { foot: true, head: false }); bowl(0.40, xh + 0.10, 0.18 * P.arc, 0.16 * P.arc, PI, TWO_PI, P, rng); return 0.66; };
   glyphFnsL["i"] = (P, rng) => { stem(0.26, xh, base, P, rng, { foot: true, head: false }); knot(0.26, xh - 0.18, P, rng); return 0.38; };
@@ -701,33 +662,14 @@ glyphFnsL["f"] = (P, rng) => {
   glyphFnsL["p"] = (P, rng) => { stem(0.18, xh, 0.44, P, rng, { foot: false, head: false }); bowl(0.40, xh + 0.20, 0.22 * P.arc, 0.24 * P.arc, -PI * 0.55, PI * 0.60, P, rng); return 0.64; };
   glyphFnsL["q"] = (P, rng) => { bowl(0.30, xh + 0.22, 0.22 * P.arc, 0.24 * P.arc, 0, TWO_PI, P, rng); stem(0.52, xh, 0.44, P, rng, { foot: false, head: false }); return 0.66; };
   glyphFnsL["r"] = (P, rng) => { stem(0.18, xh, base, P, rng, { foot: true, head: false }); bowl(0.34, xh + 0.10, 0.16 * P.arc, 0.14 * P.arc, PI, TWO_PI, P, rng); return 0.50; };
-// NEU: kleines s – zwei Bögen, ohne Mittelstrich (deine minimalere Variante)
-glyphFnsL["s"] = (P, rng) => {
-  const xh = -0.62;
-  const j = P.chaos * 0.035;
 
-  bowl(
-    0.45 + jitter(rng, j),
-    xh + 0.12 + jitter(rng, j),
-    0.20 * P.arc,
-    0.18 * P.arc,
-    PI * 1.00,
-    PI * 2.02,
-    P, rng
-  );
+  glyphFnsL["s"] = (P, rng) => {
+    const j = P.chaos * 0.035;
+    bowl(0.45 + jitter(rng, j), xh + 0.12 + jitter(rng, j), 0.20 * P.arc, 0.18 * P.arc, PI * 1.00, PI * 2.02, P, rng);
+    bowl(0.30 + jitter(rng, j), xh + 0.36 + jitter(rng, j), 0.22 * P.arc, 0.20 * P.arc, -PI * 0.12, PI * 0.92, P, rng);
+    return 0.59;
+  };
 
-  bowl(
-    0.30 + jitter(rng, j),
-    xh + 0.36 + jitter(rng, j),
-    0.22 * P.arc,
-    0.20 * P.arc,
-    -PI * 0.12,
-    PI * 0.92,
-    P, rng
-  );
-
-  return 0.59;
-};
   glyphFnsL["t"] = (P, rng) => { stem(0.26, -0.92, base, P, rng, { foot: true, head: true }); cross(0.10, xh + 0.05, 0.46, xh + 0.05, P, rng); return 0.52; };
   glyphFnsL["u"] = (P, rng) => { stem(0.16, xh, -0.08, P, rng, { foot: false, head: false }); stem(0.52, xh, -0.08, P, rng, { foot: false, head: false }); bowl(0.34, -0.06, 0.18 * P.arc, 0.14 * P.arc, 0, PI, P, rng); return 0.66; };
   glyphFnsL["v"] = (P, rng) => { cross(0.14, xh, 0.32, 0.02, P, rng); cross(0.52, xh, 0.32, 0.02, P, rng); foot(0.32, 0.02, P, rng); return 0.62; };
@@ -737,21 +679,15 @@ glyphFnsL["s"] = (P, rng) => {
   glyphFnsL["z"] = (P, rng) => { cross(0.14, xh, 0.54, xh, P, rng); cross(0.52, xh, 0.16, 0.02, P, rng); cross(0.14, 0.02, 0.56, 0.02, P, rng); return 0.60; };
 
   // ======================================================
-  // Extras: @ ? . ; & ! + * § = ÄÖÜ äöü ß %
+  // Extras
   // ======================================================
 
-  // dot (rhombus)
   glyphFnsL["."] = (P, rng) => {
     const j = P.chaos * 0.04;
     const x = 0.30 + jitter(rng, j);
     const y = 0.02 + jitter(rng, j);
     const s = 0.06 + 0.02 * P.arc;
-    BS();
-    V(x, y - s);
-    V(x + s, y);
-    V(x, y + s);
-    V(x - s, y);
-    ES(CLOSE);
+    BS(); V(x, y - s); V(x + s, y); V(x, y + s); V(x - s, y); ES(CLOSE);
     return 0.34;
   };
 
@@ -763,45 +699,17 @@ glyphFnsL["s"] = (P, rng) => {
     return 0.40;
   };
 
-// -------------------- Komma "," (modern / rhombus) --------------------
-glyphFnsL[","] = (P, rng) => {
-  const j = P.chaos * 0.045;
+  glyphFnsL[","] = (P, rng) => {
+    const j = P.chaos * 0.045;
+    const x = 0.30 + jitter(rng, j);
+    const y = 0.06 + jitter(rng, j);
+    const s = 0.06 + 0.02 * P.arc;
+    BS(); V(x, y - s); V(x + s, y); V(x, y + s); V(x - s, y); ES(CLOSE);
+    bowl(0.30 + jitter(rng, j), 0.16 + jitter(rng, j), 0.09 * P.arc, 0.12 * P.arc, -PI * 0.10, PI * 0.70, P, rng);
+    cross(0.30 + jitter(rng, j), 0.18 + jitter(rng, j), 0.26 + jitter(rng, j), 0.32 + jitter(rng, j), P, rng);
+    return 0.34;
+  };
 
-  // Rhombus (wie ".", aber etwas tiefer gesetzt)
-  const x = 0.30 + jitter(rng, j);
-  const y = 0.06 + jitter(rng, j);
-  const s = 0.06 + 0.02 * P.arc;
-
-  BS();
-  V(x, y - s);
-  V(x + s, y);
-  V(x, y + s);
-  V(x - s, y);
-  ES(CLOSE);
-
-  // kurzer, klarer Schweif
-  // (1) kleiner Bogen als "Haken"
-  bowl(
-    0.30 + jitter(rng, j),
-    0.16 + jitter(rng, j),
-    0.09 * P.arc,
-    0.12 * P.arc,
-    -PI * 0.10,
-    PI * 0.70,
-    P, rng
-  );
-
-  // (2) kurzer Strich nach unten – wirkt sauberer als zu viel Kurve
-  cross(
-    0.30 + jitter(rng, j),
-    0.18 + jitter(rng, j),
-    0.26 + jitter(rng, j),
-    0.32 + jitter(rng, j),
-    P, rng
-  );
-
-  return 0.34;
-};
   glyphFnsL["?"] = (P, rng) => {
     const j = P.chaos * 0.05;
     bowl(0.34, -0.72, 0.18 * P.arc, 0.18 * P.arc, PI * 1.05, PI * 2.15, P, rng);
@@ -828,139 +736,51 @@ glyphFnsL[","] = (P, rng) => {
     cross(0.14, -0.34, 0.62, -0.34, P, rng);
     return 0.70;
   };
-  
-  // -------------------- Currency: €  ¢ --------------------
 
-// Euro: wie ein "C" mit zwei Querbalken (klassisch), leicht frakturig gerundet
-glyphFnsL["€"] = (P, rng) => {
-  const j = P.chaos * 0.04;
-
-  // C-Form (etwas größer als normales c, damit es wie Währungszeichen wirkt)
-  bowl(
-    0.40 + jitter(rng, j),
-    -0.52 + jitter(rng, j),
-    0.28 * P.arc,
-    0.46 * P.arc,
-    PI * 0.25,
-    PI * 1.78,
-    P, rng
-  );
-
-  // zwei Querstriche (wie in vielen Euro-Zeichen)
-  cross(0.18 + jitter(rng, j), -0.64 + jitter(rng, j), 0.56 + jitter(rng, j), -0.64 + jitter(rng, j), P, rng);
-  cross(0.18 + jitter(rng, j), -0.40 + jitter(rng, j), 0.54 + jitter(rng, j), -0.40 + jitter(rng, j), P, rng);
-
-  // kleiner "hair"-Akzent oben/unten für mehr Fraktur-Flair (optional, aber schön)
-  hair(0.24, -0.96, 0.36, -1.02, P, rng);
-  hair(0.24, -0.10, 0.36, -0.04, P, rng);
-
-  return 0.76;
-};
-  
-  // Euro-Alternative: ovaler / „historischer“ (mehr geschlossen), mit zwei Balken
-// Zugriff über: ₠  (U+20A0)
-glyphFnsL["₠"] = (P, rng) => {
-  const j = P.chaos * 0.035;
-
-  // fast geschlossenes Oval (wie ein "O"), aber mit kleiner Öffnung links
-  // -> wirkt wie ein historisches Euro-Symbol, mehr „Coin/Seal“-Charakter
-  bowl(
-    0.40 + jitter(rng, j),
-    -0.52 + jitter(rng, j),
-    0.30 * P.arc,
-    0.48 * P.arc,
-    PI * 0.05,
-    TWO_PI * 0.98,
-    P, rng
-  );
-
-  // kleine „Kerbe/Öffnung“ links (macht es weniger "O" und mehr "Euro")
-  // (ein kurzer negativer Schnitt durch Überzeichnung: einfach als kurze Linie links innen)
-  cross(
-    0.12 + jitter(rng, j),
-    -0.62 + jitter(rng, j),
-    0.22 + jitter(rng, j),
-    -0.74 + jitter(rng, j),
-    P, rng
-  );
-
-  // zwei Balken etwas „innenliegend“, frakturig kompakt
-  cross(0.16 + jitter(rng, j), -0.64 + jitter(rng, j), 0.58 + jitter(rng, j), -0.64 + jitter(rng, j), P, rng);
-  cross(0.18 + jitter(rng, j), -0.40 + jitter(rng, j), 0.56 + jitter(rng, j), -0.40 + jitter(rng, j), P, rng);
-
-  // kleiner Akzent (optional, gibt „handgemacht“-Touch)
-  hair(0.28, -0.98, 0.40, -1.04, P, rng);
-
-  return 0.80;
-};
-
-// Cent (U+00A2): ein "c" mit senkrechtem Strich
-glyphFnsL["¢"] = (P, rng) => {
-  const xh = -0.62;
-  const j = P.chaos * 0.04;
-
-  // c-Form (wie dein c, nur minimal kräftiger/zentrierter)
-  bowl(
-    0.34 + jitter(rng, j),
-    xh + 0.22 + jitter(rng, j),
-    0.22 * P.arc,
-    0.24 * P.arc,
-    PI * 0.25,
-    PI * 1.75,
-    P, rng
-  );
-
-  // senkrechter Strich durch das c (klassisches ¢)
-  stem(
-    0.34 + jitter(rng, j),
-    xh - 0.10,
-    0.18,
-    P, rng,
-    { foot: false, head: false }
-  );
-
-  return 0.62;
-};
-  
-  // -------------------- Doppelpunkt ":" (rhombus-system) --------------------
-glyphFnsL[":"] = (P, rng) => {
-  const j = P.chaos * 0.04;
-  const s = 0.06 + 0.02 * P.arc;
-
-  const dot = (y) => {
-    const x = 0.30 + jitter(rng, j);
-
-    BS();
-    V(x, y - s);
-    V(x + s, y);
-    V(x, y + s);
-    V(x - s, y);
-    ES(CLOSE);
+  glyphFnsL["€"] = (P, rng) => {
+    const j = P.chaos * 0.04;
+    bowl(0.40 + jitter(rng, j), -0.52 + jitter(rng, j), 0.28 * P.arc, 0.46 * P.arc, PI * 0.25, PI * 1.78, P, rng);
+    cross(0.18 + jitter(rng, j), -0.64 + jitter(rng, j), 0.56 + jitter(rng, j), -0.64 + jitter(rng, j), P, rng);
+    cross(0.18 + jitter(rng, j), -0.40 + jitter(rng, j), 0.54 + jitter(rng, j), -0.40 + jitter(rng, j), P, rng);
+    hair(0.24, -0.96, 0.36, -1.02, P, rng);
+    hair(0.24, -0.10, 0.36, -0.04, P, rng);
+    return 0.76;
   };
 
-  // oberer Punkt
-  dot(-0.56 + jitter(rng, j));
+  glyphFnsL["₠"] = (P, rng) => {
+    const j = P.chaos * 0.035;
+    bowl(0.40 + jitter(rng, j), -0.52 + jitter(rng, j), 0.30 * P.arc, 0.48 * P.arc, PI * 0.05, TWO_PI * 0.98, P, rng);
+    cross(0.12 + jitter(rng, j), -0.62 + jitter(rng, j), 0.22 + jitter(rng, j), -0.74 + jitter(rng, j), P, rng);
+    cross(0.16 + jitter(rng, j), -0.64 + jitter(rng, j), 0.58 + jitter(rng, j), -0.64 + jitter(rng, j), P, rng);
+    cross(0.18 + jitter(rng, j), -0.40 + jitter(rng, j), 0.56 + jitter(rng, j), -0.40 + jitter(rng, j), P, rng);
+    hair(0.28, -0.98, 0.40, -1.04, P, rng);
+    return 0.80;
+  };
 
-  // unterer Punkt
-  dot(-0.20 + jitter(rng, j));
+  glyphFnsL["¢"] = (P, rng) => {
+    const j = P.chaos * 0.04;
+    bowl(0.34 + jitter(rng, j), xh + 0.22 + jitter(rng, j), 0.22 * P.arc, 0.24 * P.arc, PI * 0.25, PI * 1.75, P, rng);
+    stem(0.34 + jitter(rng, j), xh - 0.10, 0.18, P, rng, { foot: false, head: false });
+    return 0.62;
+  };
 
-  return 0.34;
-};
-  
-  // -------------------- En Dash "–" (cut-style) --------------------
-glyphFnsL["–"] = (P, rng) => {
-  const j = P.chaos * 0.03;
+  glyphFnsL[":"] = (P, rng) => {
+    const j = P.chaos * 0.04;
+    const s = 0.06 + 0.02 * P.arc;
+    const dot = (y) => {
+      const x = 0.30 + jitter(rng, j);
+      BS(); V(x, y - s); V(x + s, y); V(x, y + s); V(x - s, y); ES(CLOSE);
+    };
+    dot(-0.56 + jitter(rng, j));
+    dot(-0.20 + jitter(rng, j));
+    return 0.34;
+  };
 
-  cross(
-    0.14 + jitter(rng, j),
-    -0.46 + jitter(rng, j),
-    0.66 + jitter(rng, j),
-    -0.52 + jitter(rng, j),
-    P, rng
-  );
-
-  return 0.78;
-};
+  glyphFnsL["–"] = (P, rng) => {
+    const j = P.chaos * 0.03;
+    cross(0.14 + jitter(rng, j), -0.46 + jitter(rng, j), 0.66 + jitter(rng, j), -0.52 + jitter(rng, j), P, rng);
+    return 0.78;
+  };
 
   glyphFnsL["*"] = (P, rng) => {
     const cx = 0.34, cy = -0.52;
@@ -1005,26 +825,16 @@ glyphFnsL["–"] = (P, rng) => {
     return 0.88;
   };
 
-  // -------------------- Em Dash "—" (long cut-style) --------------------
-glyphFnsL["—"] = (P, rng) => {
-  const j = P.chaos * 0.03;
+  glyphFnsL["—"] = (P, rng) => {
+    const j = P.chaos * 0.03;
+    cross(0.08 + jitter(rng, j), -0.46 + jitter(rng, j), 0.92 + jitter(rng, j), -0.54 + jitter(rng, j), P, rng);
+    return 1.02;
+  };
 
-  cross(
-    0.08 + jitter(rng, j),
-    -0.46 + jitter(rng, j),
-    0.92 + jitter(rng, j),
-    -0.54 + jitter(rng, j),
-    P, rng
-  );
-
-  return 1.02;
-};
-  
-  // ---- umlaut helper (two rhombus dots) ----
+  // ---- umlaut helper ----
   function umlautDots(x1, x2, y, P, rng) {
     const j = P.chaos * 0.03;
     const s = 0.05 + 0.02 * P.arc;
-
     const dot = (x) => {
       BS();
       V(x + jitter(rng, j), y - s);
@@ -1033,46 +843,18 @@ glyphFnsL["—"] = (P, rng) => {
       V(x - s, y + jitter(rng, j));
       ES(CLOSE);
     };
-
     dot(x1);
     dot(x2);
   }
 
-  // lowercase umlauts
-  glyphFnsL["ä"] = (P, rng) => {
-    const adv = glyphFnsL["a"](P, rng);
-    umlautDots(0.22, 0.40, -0.98, P, rng);
-    return adv;
-  };
-  glyphFnsL["ö"] = (P, rng) => {
-    const adv = glyphFnsL["o"](P, rng);
-    umlautDots(0.20, 0.44, -0.98, P, rng);
-    return adv;
-  };
-  glyphFnsL["ü"] = (P, rng) => {
-    const adv = glyphFnsL["u"](P, rng);
-    umlautDots(0.18, 0.40, -0.98, P, rng);
-    return adv;
-  };
+  glyphFnsL["ä"] = (P, rng) => { const adv = glyphFnsL["a"](P, rng); umlautDots(0.22, 0.40, -0.98, P, rng); return adv; };
+  glyphFnsL["ö"] = (P, rng) => { const adv = glyphFnsL["o"](P, rng); umlautDots(0.20, 0.44, -0.98, P, rng); return adv; };
+  glyphFnsL["ü"] = (P, rng) => { const adv = glyphFnsL["u"](P, rng); umlautDots(0.18, 0.40, -0.98, P, rng); return adv; };
 
-  // caps umlauts
-  glyphFnsU["Ä"] = (P, rng) => {
-    const adv = glyphFnsU["A"](P, rng);
-    umlautDots(0.24, 0.46, -1.24, P, rng);
-    return adv;
-  };
-  glyphFnsU["Ö"] = (P, rng) => {
-    const adv = glyphFnsU["O"](P, rng);
-    umlautDots(0.26, 0.52, -1.24, P, rng);
-    return adv;
-  };
-  glyphFnsU["Ü"] = (P, rng) => {
-    const adv = glyphFnsU["U"](P, rng);
-    umlautDots(0.24, 0.46, -1.24, P, rng);
-    return adv;
-  };
+  glyphFnsU["Ä"] = (P, rng) => { const adv = glyphFnsU["A"](P, rng); umlautDots(0.24, 0.46, -1.24, P, rng); return adv; };
+  glyphFnsU["Ö"] = (P, rng) => { const adv = glyphFnsU["O"](P, rng); umlautDots(0.26, 0.52, -1.24, P, rng); return adv; };
+  glyphFnsU["Ü"] = (P, rng) => { const adv = glyphFnsU["U"](P, rng); umlautDots(0.24, 0.46, -1.24, P, rng); return adv; };
 
-  // ß
   glyphFnsL["ß"] = (P, rng) => {
     stem(0.20, -1.05, 0.02, P, rng, { foot: true, head: true });
     bowl(0.42, -0.70, 0.18 * P.arc, 0.20 * P.arc, PI * 0.9, PI * 2.1, P, rng);
@@ -1088,7 +870,6 @@ glyphFnsL["—"] = (P, rng) => {
 
 function drawDigit(ch, P, rng) {
   const cx = 0.34, cy = -0.52;
-
   if (ch === "0") { bowl(cx, cy, 0.26 * P.arc, 0.46 * P.arc, 0, TWO_PI, P, rng); return 0.70; }
   if (ch === "1") { stem(0.30, -1.02, 0.02, P, rng, { foot: true, head: true }); return 0.48; }
   if (ch === "2") { bowl(0.36, -0.82, 0.22 * P.arc, 0.20 * P.arc, PI * 1.1, PI * 2.15, P, rng); cross(0.50, -0.72, 0.16, 0.02, P, rng); cross(0.14, 0.02, 0.62, 0.02, P, rng); return 0.68; }
@@ -1099,7 +880,6 @@ function drawDigit(ch, P, rng) {
   if (ch === "7") { cross(0.14, -1.02, 0.66, -1.02, P, rng); cross(0.66, -1.02, 0.20, 0.02, P, rng); return 0.70; }
   if (ch === "8") { bowl(0.34, -0.78, 0.22 * P.arc, 0.20 * P.arc, 0, TWO_PI, P, rng); bowl(0.34, -0.28, 0.24 * P.arc, 0.22 * P.arc, 0, TWO_PI, P, rng); return 0.70; }
   if (ch === "9") { bowl(0.34, -0.64, 0.24 * P.arc, 0.26 * P.arc, 0, TWO_PI, P, rng); stem(0.52, -0.62, 0.02, P, rng, { foot: true, head: false }); return 0.70; }
-
   return 0.62;
 }
 

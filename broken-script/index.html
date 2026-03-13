@@ -4,14 +4,98 @@
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"></script>
     <script src="https://unpkg.com/p5.js-svg@1.6.0"></script>
-    
-    
     <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="utf-8" />
-
   </head>
   <body>
-    <main>
+    <main id="root">
+
+      <div id="canvas-container"></div>
+      <button id="controls-toggle" class="control-toggle" type="button" aria-expanded="false" aria-controls="controls">
+        Open Controls
+      </button>
+
+      <section id="controls" class="controls" aria-label="Glyph controls">
+        <div class="controls-header"><span>Broken Script</span><span>Controls</span></div>
+        <label class="control block-control" for="ui-textarea">
+          <span>Text</span>
+          <textarea id="ui-textarea" spellcheck="false">Write something…</textarea>
+        </label>
+
+        <div class="control-grid">
+          <label class="slider-control">
+            <span>Size</span>
+            <input id="ui-size" type="range" min="30" max="220" value="140" step="1" />
+            <span id="ui-size-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Weight</span>
+            <input id="ui-weight" type="range" min="2" max="60" value="18" step="1" />
+            <span id="ui-weight-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Optical weight</span>
+            <input id="ui-optical" type="range" min="0" max="1" value="0.65" step="0.01" />
+            <span id="ui-optical-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Auto SW clamp</span>
+            <input id="ui-autosw" type="range" min="0" max="1" value="0.85" step="0.01" />
+            <span id="ui-autosw-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Slant</span>
+            <input id="ui-slant" type="range" min="-0.45" max="0.45" value="0.08" step="0.01" />
+            <span id="ui-slant-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Arc radius</span>
+            <input id="ui-arc" type="range" min="0.2" max="1.4" value="0.95" step="0.01" />
+            <span id="ui-arc-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Notch / break</span>
+            <input id="ui-notch" type="range" min="0" max="1" value="0.55" step="0.01" />
+            <span id="ui-notch-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Chaos / overlap</span>
+            <input id="ui-chaos" type="range" min="0" max="1" value="0.22" step="0.01" />
+            <span id="ui-chaos-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Tracking</span>
+            <input id="ui-track" type="range" min="-0.25" max="1" value="0.12" step="0.01" />
+            <span id="ui-track-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Line height</span>
+            <input id="ui-line" type="range" min="0.85" max="1.8" value="1.18" step="0.01" />
+            <span id="ui-line-value" class="value"></span>
+          </label>
+          <label class="slider-control">
+            <span>Seed</span>
+            <input id="ui-seed" type="range" min="0" max="9999" value="120" step="1" />
+            <span id="ui-seed-value" class="value"></span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <!-- Format toggle -->
+          <div class="format-toggle" role="group" aria-label="Canvas format">
+            <button type="button" class="fmt-btn active" data-ratio="4:5">4:5</button>
+            <button type="button" class="fmt-btn" data-ratio="16:9">16:9</button>
+            <button type="button" class="fmt-btn" data-ratio="9:16">9:16</button>
+          </div>
+
+          <div class="export-btns">
+            <button type="button" id="ui-btn-png-4">PNG (4×)</button>
+            <button type="button" id="ui-btn-png-2">PNG (2×)</button>
+            <button type="button" id="ui-btn-svg">SVG</button>
+          </div>
+        </div>
+
+      </section>
     </main>
     <script src="sketch.js"></script>
   </body>
