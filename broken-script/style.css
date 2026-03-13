@@ -89,6 +89,19 @@ canvas {
   text-align: center;
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
   cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#controls .controls-header,
+#controls .slider-control > span,
+#controls .block-control > span,
+#controls .fmt-btn,
+#controls .actions button,
+#controls .control,
+#controls .export-btns,
+#controls .format-toggle {
+  text-transform: uppercase;
 }
 
 .control-toggle:hover {
