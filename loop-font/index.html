@@ -5,11 +5,140 @@
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="utf-8" />
-
   </head>
   <body>
-    <main>
+    <main id="root">
+
+      <div id="canvas-container">
+        <section id="sketch-holder"></section>
+      </div>
+
+      <button id="controls-toggle" class="control-toggle" type="button" aria-expanded="false" aria-controls="controls">
+        Open Controls
+      </button>
+
+      <section id="controls" class="controls" aria-label="Loop Font Controls">
+        <div class="controls-header">
+          <span>Loop Font</span>
+          <span>Controls</span>
+        </div>
+
+        <label class="control block-control" for="textArea">
+          <span>Text</span>
+          <textarea id="textArea" spellcheck="false" rows="4">Loop Font
+äöü ÄÖÜ 123!?
+@ € $ % & § # * ~
+← ↑ → ↓ ↔ ↕</textarea>
+        </label>
+
+        <div class="control-grid">
+
+          <!-- Layout -->
+          <label class="slider-control">
+            <span>Ausrichtung</span>
+            <select id="alignSelect" class="select-control">
+              <option value="left">Links</option>
+              <option value="center">Zentriert</option>
+              <option value="right">Rechts</option>
+            </select>
+          </label>
+
+          <label class="slider-control">
+            <span>Zeilenabstand</span>
+            <input id="leading" type="range" min="120" max="260" value="190" step="1" />
+            <span class="value" id="leading-value"></span>
+          </label>
+
+          <!-- Glyphen -->
+          <label class="slider-control">
+            <span>Krümmung</span>
+            <input id="curve" type="range" min="-1" max="1" value="-0.4" step="0.01" />
+            <span class="value" id="curve-value"></span>
+          </label>
+
+          <label class="slider-control">
+            <span>Schleifen</span>
+            <input id="loops" type="range" min="0" max="1" value="0.6" step="0.01" />
+            <span class="value" id="loops-value"></span>
+          </label>
+
+          <label class="slider-control">
+            <span>Radius</span>
+            <input id="radius" type="range" min="0.2" max="2.0" value="1" step="0.01" />
+            <span class="value" id="radius-value"></span>
+          </label>
+
+          <label class="slider-control">
+            <span>Strichstärke</span>
+            <input id="weight" type="range" min="4" max="40" value="16" step="1" />
+            <span class="value" id="weight-value"></span>
+          </label>
+
+          <label class="slider-control">
+            <span>Abstand</span>
+            <input id="spacing" type="range" min="30" max="160" value="90" step="1" />
+            <span class="value" id="spacing-value"></span>
+          </label>
+
+        </div>
+
+        <div class="actions">
+          <div class="toggles-row">
+            <label class="toggle-control">
+              <input id="fillMode" type="checkbox" />
+              <span>Gefüllt</span>
+            </label>
+
+            <label class="toggle-control">
+              <input id="randomAlt" type="checkbox" />
+              <span>Random Alts</span>
+            </label>
+
+            <label class="toggle-control">
+              <input id="liga" type="checkbox" checked />
+              <span>Ligaturen</span>
+            </label>
+          </div>
+
+          <div class="opentype-row">
+            <select id="ssSelect" class="select-control">
+              <option value="default">Standard</option>
+              <option value="ss01">ss01 – Wild</option>
+              <option value="ss02">ss02 – Minimal</option>
+              <option value="ss03">ss03 – Overcross</option>
+            </select>
+          </div>
+
+          <div class="export-btns">
+            <button id="exportSvgBtn" type="button">SVG Export</button>
+          </div>
+        </div>
+
+      </section>
     </main>
+
     <script src="sketch.js"></script>
+    <script>
+      // Controls toggle
+      const toggle = document.getElementById('controls-toggle');
+      const controls = document.getElementById('controls');
+      toggle.addEventListener('click', () => {
+        const open = controls.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', open);
+        toggle.textContent = open ? 'Close Controls' : 'Open Controls';
+      });
+
+      // Live slider value display
+      document.querySelectorAll('input[type="range"]').forEach(input => {
+        const valueEl = document.getElementById(input.id + '-value');
+        if (valueEl) {
+          const update = () => valueEl.textContent = parseFloat(input.value).toFixed(
+            input.step && input.step.includes('.') ? input.step.split('.')[1].length : 0
+          );
+          update();
+          input.addEventListener('input', update);
+        }
+      });
+    </script>
   </body>
 </html>
