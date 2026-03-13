@@ -96,11 +96,9 @@ canvas {
 #controls .controls-header,
 #controls .slider-control > span,
 #controls .block-control > span,
-#controls .fmt-btn,
 #controls .actions button,
 #controls .control,
-#controls .export-btns,
-#controls .format-toggle {
+#controls .export-btns {
   text-transform: uppercase;
 }
 
@@ -213,37 +211,6 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   width: 100%;
   justify-content: space-between;
-}
-
-/* Format toggle group */
-.format-toggle {
-  display: flex;
-  gap: 0;
-  border: 1px solid #000;
-  border-radius: 50px;
-  overflow: hidden;
-}
-
-.fmt-btn {
-  background: #fff;
-  color: #000;
-  border: none;
-
-  padding: 4px 12px;
-  cursor: pointer;
-  font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
-  font-size: 13px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.fmt-btn:last-child {
-  border-right: none;
-}
-
-.fmt-btn.active,
-.fmt-btn:hover {
-  background: #fff;
-  color: #000;
 }
 
 /* Export buttons */

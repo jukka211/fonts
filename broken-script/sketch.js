@@ -1,16 +1,12 @@
 // ========================================================
 // Broken Script – modular glyph builder
 // ✅ Canvas + High-Res PNG export (2×/4×) + SVG export
-// ✅ Canvas format ratios: 4:5 | 16:9 | 9:16
 // ========================================================
 
 let ui = {};
 let glyphFnsU = {};
 let glyphFnsL = {};
 let G = null;
-
-// Current canvas aspect ratio { w, h }  (logical units, not pixels)
-let currentRatio = { w: 4, h: 5 };
 
 // ---------- Graphics context + wrappers ----------
 function setG(g) { G = g; }
@@ -29,28 +25,12 @@ function SW(w) { G.strokeWeight(w); }
 function SC(cap) { G.strokeCap(cap); }
 function SJ(j) { G.strokeJoin(j); }
 
-// ---------- Ratio helpers ----------
-
-/**
- * Given the container's available width & height and a target ratio {w,h},
- * return the largest integer-aligned canvas size that fits inside the container
- * while preserving the ratio.
- */
-function ratioFit(containerW, containerH, ratio) {
-  const byW = { w: containerW, h: Math.round(containerW * ratio.h / ratio.w) };
-  const byH = { w: Math.round(containerH * ratio.w / ratio.h), h: containerH };
-  if (byW.h <= containerH) return byW;
-  return byH;
-}
-
 // ---------- Setup / Draw ----------
 function setup() {
   const container = document.getElementById("canvas-container");
   const containerW = Math.max(1, Math.floor(container?.clientWidth  || 800));
   const containerH = Math.max(1, Math.floor(container?.clientHeight || 1000));
-  const sz = ratioFit(containerW, containerH, currentRatio);
-
-  const cnv = createCanvas(Math.max(1, sz.w), Math.max(1, sz.h));
+  const cnv = createCanvas(containerW, containerH);
   cnv.parent(container || document.body);
   pixelDensity(2);
 
@@ -62,11 +42,8 @@ function fitCanvasToContainer() {
   const container = document.getElementById("canvas-container");
   if (!container) return;
 
-  const containerW = Math.max(1, Math.floor(container.clientWidth));
-  const containerH = Math.max(1, Math.floor(container.clientHeight));
-  const sz = ratioFit(containerW, containerH, currentRatio);
-  const w = Math.max(1, sz.w);
-  const h = Math.max(1, sz.h);
+  const w = Math.max(1, Math.floor(container.clientWidth));
+  const h = Math.max(1, Math.floor(container.clientHeight));
   if (w !== width || h !== height) {
     resizeCanvas(w, h);
   }
@@ -265,25 +242,6 @@ function buildUI() {
     });
   }
 
-  // ---- Format toggle ----
-  const ratioMap = {
-    "4:5":  { w: 4,  h: 5  },
-    "16:9": { w: 16, h: 9  },
-    "9:16": { w: 9,  h: 16 },
-  };
-
-  document.querySelectorAll(".fmt-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".fmt-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      const key = btn.dataset.ratio;
-      if (ratioMap[key]) {
-        currentRatio = ratioMap[key];
-        fitCanvasToContainer();
-      }
-    });
-  });
 }
 
 // ========================================================
@@ -294,9 +252,7 @@ function downloadPNG(scale = 4) {
   const P   = getParams();
   const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
 
-  // Derive the export dimensions directly from the chosen ratio so the
-  // output is pixel-perfect regardless of the browser window size.
-  // We use the live canvas as the reference logical size.
+  // Export based on the live canvas size so output always matches displayed size.
   const logW = width;
   const logH = height;
 
@@ -307,7 +263,7 @@ function downloadPNG(scale = 4) {
   // Pass the logical size so drawScene's proportional layout matches exactly.
   drawScene(pg, P, str, logW, logH);
 
-  const filename = `brokenscript_${currentRatio.w}x${currentRatio.h}_${scale}x.png`;
+  const filename = `brokenscript_${logW}x${logH}_${scale}x.png`;
   const url = pg.canvas.toDataURL("image/png");
   const a = document.createElement("a");
   a.href = url;
@@ -332,7 +288,7 @@ function downloadSVG() {
 
   drawScene(svg, P, str, width, height);
 
-  save(svg, `brokenscript_${currentRatio.w}x${currentRatio.h}.svg`);
+  save(svg, `brokenscript_${width}x${height}.svg`);
   svg.remove();
 }
 
