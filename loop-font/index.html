@@ -13,11 +13,11 @@
         <section id="sketch-holder"></section>
       </div>
 
-      <button id="controls-toggle" class="control-toggle" type="button" aria-expanded="false" aria-controls="controls">
-        Open Controls
+      <button id="controls-toggle" class="control-toggle" type="button" aria-expanded="true" aria-controls="controls">
+        Close Controls
       </button>
 
-      <section id="controls" class="controls" aria-label="Loop Font Controls">
+      <section id="controls" class="controls open" aria-label="Loop Font Controls">
         <div class="controls-header">
           <span>Loop Font</span>
           <span>Controls</span>
@@ -122,6 +122,9 @@
       // Controls toggle
       const toggle = document.getElementById('controls-toggle');
       const controls = document.getElementById('controls');
+      controls.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.textContent = 'Close Controls';
       toggle.addEventListener('click', () => {
         const open = controls.classList.toggle('open');
         toggle.setAttribute('aria-expanded', open);
