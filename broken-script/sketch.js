@@ -1,12 +1,21 @@
 // ========================================================
 // Broken Script – modular glyph builder
 // ✅ Canvas + High-Res PNG export (2×/4×) + SVG export
+// ✅ Direct canvas typing (no textarea)
 // ========================================================
 
 let ui = {};
 let glyphFnsU = {};
 let glyphFnsL = {};
 let G = null;
+
+// ---- inline editor state ----
+let editorText    = "Write something...";
+let cursorPos     = editorText.length;
+let cursorVisible = true;
+let cursorTimer   = 0;
+const CURSOR_BLINK_MS = 530;
+let isPlaceholder = true;          // true while showing the grey hint
 
 // ---------- Graphics context + wrappers ----------
 function setG(g) { G = g; }
@@ -36,27 +45,224 @@ function setup() {
 
   initGlyphs();
   buildUI();
+  initKeyboardInput();
 }
 
 function fitCanvasToContainer() {
   const container = document.getElementById("canvas-container");
   if (!container) return;
-
   const w = Math.max(1, Math.floor(container.clientWidth));
   const h = Math.max(1, Math.floor(container.clientHeight));
-  if (w !== width || h !== height) {
-    resizeCanvas(w, h);
+  if (w !== width || h !== height) resizeCanvas(w, h);
+}
+
+function windowResized() { fitCanvasToContainer(); }
+
+function draw() {
+  // blink cursor
+  if (millis() - cursorTimer > CURSOR_BLINK_MS) {
+    cursorVisible = !cursorVisible;
+    cursorTimer   = millis();
+  }
+
+  const P   = getParams();
+  const str = isPlaceholder ? "" : editorText;
+  drawScene(this, P, str, width, height);
+
+  // draw cursor overlay (always, including placeholder state)
+  if (cursorVisible) {
+    drawCursorOverlay(P);
   }
 }
 
-function windowResized() {
-  fitCanvasToContainer();
+// ---------- Cursor overlay ----------
+// Walks through the same layout logic as drawTextG to find cursor position.
+function drawCursorOverlay(P) {
+  const str = isPlaceholder ? "" : editorText;
+  if (str.length === 0) {
+    const pad  = width  * 0.04;
+    const padV = height * 0.06;
+    push();
+    stroke(0);
+    strokeWeight(2);
+    noFill();
+    line(pad, padV, pad, padV + P.size);
+    pop();
+    return;
+  }
+
+  const lines = str.replace(/\r/g, "").split("\n");
+  const pad   = width  * 0.04;
+  const padV  = height * 0.06;
+  const x0    = pad;
+  const y0    = padV + P.size;
+  const maxW  = width  - 2 * pad;
+  const em    = P.size;
+  const lineH = em * P.line;
+
+  let penY   = y0;
+  let penX   = x0;
+  let charIdx = 0;  // global char index through the whole string
+
+  outer:
+  for (let li = 0; li < lines.length; li++) {
+    penX = x0;
+    const line = lines[li];
+
+    for (let i = 0; i < line.length; i++) {
+      if (charIdx === cursorPos) {
+        _drawCursorAt(penX, penY, P);
+        break outer;
+      }
+
+      const ch = line[i];
+      if (ch === " ") {
+        penX += em * 0.38;
+      } else {
+        if (penX > x0 + maxW - em * 0.6) { penX = x0; penY += lineH; }
+        const w = measureGlyphAdv(ch, P);
+        penX += w + em * P.track;
+      }
+      charIdx++;
+    }
+
+    if (charIdx === cursorPos) {
+      _drawCursorAt(penX, penY, P);
+      break;
+    }
+    charIdx++; // newline char
+    penY += lineH;
+  }
+
+  // cursor at very end
+  if (charIdx === cursorPos) {
+    _drawCursorAt(penX, penY, P);
+  }
 }
 
-function draw() {
-  const P = getParams();
-  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
-  drawScene(this, P, str, width, height);
+function _drawCursorAt(x, y, P) {
+  push();
+  stroke(0);
+  strokeWeight(2);
+  noFill();
+  // slant-compensate the cursor bar so it aligns with the slanted glyphs
+  const slantOffset = P.slant * P.size;
+  line(x + slantOffset, y - P.size, x, y + P.size * 0.1);
+  pop();
+}
+
+// Advance width without actually drawing (mirrors drawGlyphG logic)
+function measureGlyphAdv(ch, P) {
+  const code = ch.codePointAt(0) || 0;
+  const rng  = makeRng(P.seed * 1337 + code * 97);
+  const fnU  = glyphFnsU[ch];
+  const fnL  = glyphFnsL[ch];
+
+  // We need the return value but can't call the real fn without a G context.
+  // Use a no-op graphics proxy just to get the advance.
+  let adv = 0.62;
+  const saved = G;
+  const proxy = {
+    beginShape:()=>{}, endShape:()=>{}, vertex:()=>{}, quadraticVertex:()=>{},
+    line:()=>{}, rect:()=>{}, noFill:()=>{}, noStroke:()=>{}, fill:()=>{},
+    stroke:()=>{}, strokeWeight:()=>{}, strokeCap:()=>{}, strokeJoin:()=>{},
+    push:()=>{}, pop:()=>{}, translate:()=>{}, scale:()=>{}, applyMatrix:()=>{}
+  };
+  G = proxy;
+  if (fnU)      adv = fnU(P, rng);
+  else if (fnL) adv = fnL(P, rng);
+  else if (isDigit(ch)) adv = drawDigit(ch, P, rng);
+  G = saved;
+  return adv * P.size;
+}
+
+// ---------- Keyboard input ----------
+function initKeyboardInput() {
+  // Prevent p5 from intercepting keys
+  window.addEventListener("keydown", handleKey, true);
+}
+
+function handleKey(e) {
+  // Ignore modifier-only keys and browser shortcuts (except ones we handle)
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === "a") {
+      // select-all: move cursor to end (simplistic)
+      if (!isPlaceholder) { cursorPos = editorText.length; }
+      return;
+    }
+    return; // let browser handle copy/paste etc.
+  }
+
+  // Ignore function keys, tab, escape
+  if (["F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12",
+       "Tab","Escape","Shift","Alt","Control","Meta","CapsLock"].includes(e.key)) return;
+
+  // If showing placeholder, clear it on first real keystroke
+  if (isPlaceholder && e.key !== "Backspace" && e.key !== "Delete") {
+    editorText  = "";
+    cursorPos   = 0;
+    isPlaceholder = false;
+  }
+
+  resetCursorBlink();
+
+  if (e.key === "Backspace") {
+    if (isPlaceholder) return;
+    if (cursorPos > 0) {
+      editorText = editorText.slice(0, cursorPos - 1) + editorText.slice(cursorPos);
+      cursorPos--;
+    }
+    if (editorText.length === 0) { isPlaceholder = true; editorText = "Write something..."; cursorPos = editorText.length; }
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "Delete") {
+    if (isPlaceholder) return;
+    if (cursorPos < editorText.length) {
+      editorText = editorText.slice(0, cursorPos) + editorText.slice(cursorPos + 1);
+    }
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "ArrowLeft") {
+    if (!isPlaceholder) cursorPos = max(0, cursorPos - 1);
+    e.preventDefault(); return;
+  }
+  if (e.key === "ArrowRight") {
+    if (!isPlaceholder) cursorPos = min(editorText.length, cursorPos + 1);
+    e.preventDefault(); return;
+  }
+  if (e.key === "ArrowUp" || e.key === "Home") {
+    if (!isPlaceholder) cursorPos = 0;
+    e.preventDefault(); return;
+  }
+  if (e.key === "ArrowDown" || e.key === "End") {
+    if (!isPlaceholder) cursorPos = editorText.length;
+    e.preventDefault(); return;
+  }
+
+  if (e.key === "Enter") {
+    if (!isPlaceholder) {
+      editorText = editorText.slice(0, cursorPos) + "\n" + editorText.slice(cursorPos);
+      cursorPos++;
+    }
+    e.preventDefault();
+    return;
+  }
+
+  // Printable character
+  if (e.key.length === 1) {
+    editorText = editorText.slice(0, cursorPos) + e.key + editorText.slice(cursorPos);
+    cursorPos++;
+    e.preventDefault();
+  }
+}
+
+function resetCursorBlink() {
+  cursorVisible = true;
+  cursorTimer   = millis();
 }
 
 // ---------- Params ----------
@@ -64,7 +270,6 @@ function getParams() {
   return {
     size:    Number(ui.size?.value),
     weight:  Number(ui.weight?.value),
-    optical: Number(ui.optical?.value),
     autoSW:  Number(ui.autoSW?.value),
     slant:   Number(ui.slant?.value),
     arc:     Number(ui.arc?.value),
@@ -76,11 +281,11 @@ function getParams() {
   };
 }
 
-// ---------- Optical stroke ----------
+// ---------- Stroke ----------
 function computeStrokeNorm(P) {
   let sw = P.weight / max(1, P.size);
 
-  const optical = constrain(P.optical ?? 0, 0, 1);
+  const optical = 0.65;
   const scaleRef = 140;
   const ratio = max(0.25, P.size / scaleRef);
   const exp = lerp(0.0, 0.35, optical);
@@ -96,23 +301,18 @@ function computeStrokeNorm(P) {
 }
 
 // ---------- Scene / Layout ----------
-// w, h are the logical canvas dimensions (pixels at scale=1).
-// Always pass them explicitly so exports match the live canvas exactly.
 function drawScene(g, P, str, w, h) {
   setG(g);
-
-  // fall back to the live canvas size when called from draw()
   if (w === undefined) w = width;
   if (h === undefined) h = height;
 
   G.background(255);
 
-  // proportional padding – looks the same at every export scale
   const pad  = w * 0.04;
   const padV = h * 0.06;
 
   const x0   = pad;
-  const y0   = padV + P.size;          // one em below top padding
+  const y0   = padV + P.size;
   const maxW = w - 2 * pad;
   const maxH = h - padV - P.size * 0.5;
 
@@ -132,12 +332,9 @@ function drawTextG(str, x, y, maxW, maxH, P) {
 
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-
       if (ch === " ") { penX += em * 0.38; continue; }
-
       if (penX > x + maxW - em * 0.6) { penX = x; penY += lineH; }
       if (penY > y + maxH) return;
-
       const w = drawGlyphG(ch, penX, penY, P);
       penX += w + em * P.track;
     }
@@ -184,7 +381,7 @@ function isDigit(ch) { return ch >= "0" && ch <= "9"; }
 function buildUI() {
   const byId = (id) => document.getElementById(id);
   const controlsSection = byId("controls");
-  const controlsToggle = byId("controls-toggle");
+  const controlsToggle  = byId("controls-toggle");
 
   const linkValue = (inputId, valueId) => {
     const input = byId(inputId);
@@ -195,10 +392,8 @@ function buildUI() {
     sync();
   };
 
-  ui.ta     = byId("ui-textarea");
   ui.size   = byId("ui-size");
   ui.weight = byId("ui-weight");
-  ui.optical= byId("ui-optical");
   ui.autoSW = byId("ui-autosw");
   ui.slant  = byId("ui-slant");
   ui.arc    = byId("ui-arc");
@@ -210,7 +405,6 @@ function buildUI() {
 
   linkValue("ui-size",    "ui-size-value");
   linkValue("ui-weight",  "ui-weight-value");
-  linkValue("ui-optical", "ui-optical-value");
   linkValue("ui-autosw",  "ui-autosw-value");
   linkValue("ui-slant",   "ui-slant-value");
   linkValue("ui-arc",     "ui-arc-value");
@@ -234,14 +428,11 @@ function buildUI() {
       controlsToggle.setAttribute("aria-expanded", open ? "true" : "false");
       controlsToggle.textContent = open ? "Close Controls" : "Open Controls";
     };
-
     setControlsOpen(true);
-
     controlsToggle.addEventListener("click", () => {
       setControlsOpen(!controlsSection.classList.contains("open"));
     });
   }
-
 }
 
 // ========================================================
@@ -250,17 +441,15 @@ function buildUI() {
 
 function downloadPNG(scale = 4) {
   const P   = getParams();
-  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
+  const str = isPlaceholder ? "" : editorText;
 
-  // Export based on the live canvas size so output always matches displayed size.
   const logW = width;
   const logH = height;
 
   const pg = createGraphics(logW * scale, logH * scale);
   pg.pixelDensity(1);
-  pg.scale(scale);   // everything drawn at logical coords × scale
+  pg.scale(scale);
 
-  // Pass the logical size so drawScene's proportional layout matches exactly.
   drawScene(pg, P, str, logW, logH);
 
   const filename = `brokenscript_${logW}x${logH}_${scale}x.png`;
@@ -276,18 +465,16 @@ function downloadPNG(scale = 4) {
 
 function downloadSVG() {
   if (typeof SVG === "undefined") {
-    alert("SVG export needs p5.js-svg. In p5 Web Editor: Sketch → Add Library → search 'p5.js-svg'.");
+    alert("SVG export needs p5.js-svg.");
     return;
   }
 
   const P   = getParams();
-  const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
+  const str = isPlaceholder ? "" : editorText;
 
   const svg = createGraphics(width, height, SVG);
   svg.pixelDensity(1);
-
   drawScene(svg, P, str, width, height);
-
   save(svg, `brokenscript_${width}x${height}.svg`);
   svg.remove();
 }
@@ -382,8 +569,6 @@ function cross(x0, y0, x1, y1, P, rng) {
 // ========================================================
 
 function initGlyphs() {
-  // -------- uppercase A–Z --------
-
   glyphFnsU["Â"] = (P, rng) => {
     stem(0.12, -1.02, 0.02, P, rng, { foot: true, head: true });
     stem(0.58, -1.02, 0.02, P, rng, { foot: true, head: true });
@@ -591,7 +776,6 @@ function initGlyphs() {
     return 0.74;
   };
 
-  // -------- lowercase a–z --------
   const xh   = -0.62;
   const base =  0.02;
 
@@ -635,10 +819,6 @@ function initGlyphs() {
   glyphFnsL["x"] = (P, rng) => { cross(0.14, xh, 0.52, 0.02, P, rng); cross(0.52, xh, 0.14, 0.02, P, rng); knot(0.33, xh + 0.22, P, rng); return 0.62; };
   glyphFnsL["y"] = (P, rng) => { cross(0.14, xh, 0.32, -0.06, P, rng); cross(0.52, xh, 0.32, -0.06, P, rng); stem(0.32, -0.06, 0.44, P, rng, { foot: false, head: false }); bowl(0.20, 0.36, 0.18 * P.arc, 0.12 * P.arc, 0, PI, P, rng); return 0.62; };
   glyphFnsL["z"] = (P, rng) => { cross(0.14, xh, 0.54, xh, P, rng); cross(0.52, xh, 0.16, 0.02, P, rng); cross(0.14, 0.02, 0.56, 0.02, P, rng); return 0.60; };
-
-  // ======================================================
-  // Extras
-  // ======================================================
 
   glyphFnsL["."] = (P, rng) => {
     const j = P.chaos * 0.04;
@@ -789,7 +969,6 @@ function initGlyphs() {
     return 1.02;
   };
 
-  // ---- umlaut helper ----
   function umlautDots(x1, x2, y, P, rng) {
     const j = P.chaos * 0.03;
     const s = 0.05 + 0.02 * P.arc;
