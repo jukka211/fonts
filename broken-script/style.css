@@ -6,11 +6,38 @@
   font-style: normal;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   color: #111;
   font-family: "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
+  font-size: 14.5px;
+}
+
+#root,
+#controls,
+#canvas-container,
+canvas,
+.control-toggle,
+.controls-header,
+.control-grid,
+.control,
+.block-control,
+.block-control textarea,
+.slider-control,
+.slider-control > span,
+.slider-control .value,
+.actions,
+.actions button,
+.export-btns,
+input,
+textarea,
+button,
+span,
+div,
+label {
+  font-size: 14.5px;
 }
 
 #root {
@@ -132,7 +159,6 @@ canvas {
 .block-control textarea {
   min-height: 120px;
   width: 100%;
-  font-size: 16px;
   resize: both;
   padding: 8px;
   box-sizing: border-box;
@@ -146,7 +172,6 @@ canvas {
 .slider-control {
   display: grid;
   gap: 6px;
-  font-size: 13px;
 }
 
 .slider-control,
@@ -226,7 +251,6 @@ input[type="range"]::-moz-range-thumb {
   padding: 4px 8px;
   cursor: pointer;
   border-radius: 50px;
-
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
 }
 
