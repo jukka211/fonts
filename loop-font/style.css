@@ -12,6 +12,7 @@ html, body {
   padding: 0;
   color: #111;
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
+  font-size: 14.5px;
 }
 
 canvas {
@@ -20,6 +21,7 @@ canvas {
 
 * {
   box-sizing: border-box;
+  font-size: 14.5px;
 }
 
 /* ── Root shell ── */
@@ -69,13 +71,12 @@ canvas {
   bottom: 0;
   z-index: 50;
   border: none;
-
   background: #000;
   color: #fff;
   padding: 16px 16px;
   text-align: center;
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
-  font-size: 13px;
+  font-size: 14.5px;
   cursor: pointer;
   transition: background 0.15s;
   letter-spacing: 0.04em;
@@ -117,7 +118,7 @@ canvas {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -132,7 +133,7 @@ canvas {
 }
 
 .block-control > span {
-  font-size: 11px;
+  font-size: 14.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -142,7 +143,7 @@ canvas {
 .block-control textarea {
   min-height: 80px;
   width: 100%;
-  font-size: 14px;
+  font-size: 14.5px;
   resize: vertical;
   padding: 8px;
   border: 1px solid #000;
@@ -170,7 +171,7 @@ canvas {
 .slider-control {
   display: grid;
   gap: 4px;
-  font-size: 11px;
+  font-size: 14.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -179,7 +180,7 @@ canvas {
 }
 
 .slider-control > span:first-child {
-  font-size: 11px;
+  font-size: 14.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -233,7 +234,7 @@ input[type="range"]::-moz-range-thumb {
 
 .slider-control .value {
   color: #111;
-  font-size: 11px;
+  font-size: 14.5px;
   font-variant-numeric: tabular-nums;
   justify-self: end;
   font-weight: 400;
@@ -249,7 +250,7 @@ input[type="range"]::-moz-range-thumb {
   color: #000;
   padding: 4px 6px;
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
-  font-size: 12px;
+  font-size: 14.5px;
   border-radius: 0;
   outline: none;
   cursor: pointer;
@@ -286,7 +287,7 @@ input[type="range"]::-moz-range-thumb {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -347,7 +348,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50px;
   border: none;
   font-family: "OOArketa", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, sans-serif;
-  font-size: 12px;
+  font-size: 14.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
