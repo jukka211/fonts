@@ -64,7 +64,6 @@ function getParams() {
   return {
     size:    Number(ui.size?.value),
     weight:  Number(ui.weight?.value),
-    optical: Number(ui.optical?.value),
     autoSW:  Number(ui.autoSW?.value),
     slant:   Number(ui.slant?.value),
     arc:     Number(ui.arc?.value),
@@ -76,15 +75,9 @@ function getParams() {
   };
 }
 
-// ---------- Optical stroke ----------
+// ---------- Stroke ----------
 function computeStrokeNorm(P) {
   let sw = P.weight / max(1, P.size);
-
-  const optical = constrain(P.optical ?? 0, 0, 1);
-  const scaleRef = 140;
-  const ratio = max(0.25, P.size / scaleRef);
-  const exp = lerp(0.0, 0.35, optical);
-  sw *= pow(ratio, -exp);
 
   const autoSW = constrain(P.autoSW ?? 0, 0, 1);
   const minSW = lerp(0.15, 0.25, autoSW);
@@ -96,23 +89,19 @@ function computeStrokeNorm(P) {
 }
 
 // ---------- Scene / Layout ----------
-// w, h are the logical canvas dimensions (pixels at scale=1).
-// Always pass them explicitly so exports match the live canvas exactly.
 function drawScene(g, P, str, w, h) {
   setG(g);
 
-  // fall back to the live canvas size when called from draw()
   if (w === undefined) w = width;
   if (h === undefined) h = height;
 
   G.background(255);
 
-  // proportional padding – looks the same at every export scale
   const pad  = w * 0.04;
   const padV = h * 0.06;
 
   const x0   = pad;
-  const y0   = padV + P.size;          // one em below top padding
+  const y0   = padV + P.size;
   const maxW = w - 2 * pad;
   const maxH = h - padV - P.size * 0.5;
 
@@ -198,7 +187,6 @@ function buildUI() {
   ui.ta     = byId("ui-textarea");
   ui.size   = byId("ui-size");
   ui.weight = byId("ui-weight");
-  ui.optical= byId("ui-optical");
   ui.autoSW = byId("ui-autosw");
   ui.slant  = byId("ui-slant");
   ui.arc    = byId("ui-arc");
@@ -210,7 +198,6 @@ function buildUI() {
 
   linkValue("ui-size",    "ui-size-value");
   linkValue("ui-weight",  "ui-weight-value");
-  linkValue("ui-optical", "ui-optical-value");
   linkValue("ui-autosw",  "ui-autosw-value");
   linkValue("ui-slant",   "ui-slant-value");
   linkValue("ui-arc",     "ui-arc-value");
@@ -241,7 +228,6 @@ function buildUI() {
       setControlsOpen(!controlsSection.classList.contains("open"));
     });
   }
-
 }
 
 // ========================================================
@@ -252,15 +238,13 @@ function downloadPNG(scale = 4) {
   const P   = getParams();
   const str = (ui.ta && ui.ta.value !== undefined) ? ui.ta.value : "";
 
-  // Export based on the live canvas size so output always matches displayed size.
   const logW = width;
   const logH = height;
 
   const pg = createGraphics(logW * scale, logH * scale);
   pg.pixelDensity(1);
-  pg.scale(scale);   // everything drawn at logical coords × scale
+  pg.scale(scale);
 
-  // Pass the logical size so drawScene's proportional layout matches exactly.
   drawScene(pg, P, str, logW, logH);
 
   const filename = `brokenscript_${logW}x${logH}_${scale}x.png`;
@@ -789,7 +773,6 @@ function initGlyphs() {
     return 1.02;
   };
 
-  // ---- umlaut helper ----
   function umlautDots(x1, x2, y, P, rng) {
     const j = P.chaos * 0.03;
     const s = 0.05 + 0.02 * P.arc;
